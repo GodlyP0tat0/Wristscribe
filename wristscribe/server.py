@@ -21,7 +21,7 @@ from pathlib import PurePath
 from urllib.parse import parse_qs, urlsplit
 
 from . import __version__
-from .dictation import DictationService
+from .dictation import DictationService, Result
 from .transcriber import SUPPORTED_FORMATS, TranscriptionError, format_from_content_type
 
 log = logging.getLogger(__name__)
@@ -210,9 +210,9 @@ class Handler(BaseHTTPRequestHandler):
         text = extract_text(self.body, self.headers.get("Content-Type", ""))
         if not text.strip():
             raise RequestError(HTTPStatus.BAD_REQUEST, "No text received")
-        inserted = self.server.service.from_text(text)
-        log.info("Inserted %d characters (dictated on watch)", len(inserted))
-        return {"ok": True, "text": inserted}
+        result = self.server.service.from_text(text)
+        log.info("Inserted %d characters (dictated on watch%s)", len(result.text), _cleanup_note(result))
+        return _result_payload(result)
 
     def _audio(self) -> dict:
         audio = self.body
@@ -229,7 +229,22 @@ class Handler(BaseHTTPRequestHandler):
             raise RequestError(HTTPStatus.BAD_REQUEST, "No audio received")
 
         hint = self.query.get("format", [None])[0] or filename_hint or format_from_content_type(content_type)
-        inserted, transcribe_ms = self.server.service.from_audio(audio, hint)
-        log.info("Inserted %d characters (%.0f KB audio, transcribed in %d ms)",
-                 len(inserted), len(audio) / 1024, transcribe_ms)
-        return {"ok": True, "text": inserted, "transcribe_ms": transcribe_ms}
+        result = self.server.service.from_audio(audio, hint)
+        log.info("Inserted %d characters (%.0f KB audio, transcribed in %d ms%s)",
+                 len(result.text), len(audio) / 1024, result.transcribe_ms, _cleanup_note(result))
+        return _result_payload(result)
+
+
+def _cleanup_note(result: Result) -> str:
+    return "" if result.cleanup_ms is None else f", cleaned up in {result.cleanup_ms} ms"
+
+
+def _result_payload(result: Result) -> dict:
+    payload = {"ok": True, "text": result.text, "cleaned": result.cleaned}
+    if result.cleaned:
+        payload["raw"] = result.raw
+    if result.transcribe_ms is not None:
+        payload["transcribe_ms"] = result.transcribe_ms
+    if result.cleanup_ms is not None:
+        payload["cleanup_ms"] = result.cleanup_ms
+    return payload

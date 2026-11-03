@@ -34,6 +34,22 @@ class FakeTranscriber:
         return self.reply
 
 
+class FakeCleaner:
+    """Uppercases text, or fails when `error` is set."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+        self.error: str | None = None
+
+    def clean(self, text: str) -> str:
+        from wristscribe.cleanup import CleanupError
+
+        self.calls.append(text)
+        if self.error:
+            raise CleanupError(self.error)
+        return text.upper()
+
+
 class Harness:
     def __init__(self, server: WristScribeServer, output: RecordingOutput, transcriber: FakeTranscriber):
         self.server = server
@@ -44,13 +60,26 @@ class Harness:
         self.auth = {"Authorization": f"Bearer {TOKEN}"}
 
 
+def _start(cleaner=None):
+    output, transcriber = RecordingOutput(), FakeTranscriber()
+    service = DictationService(transcriber, output, append_space=True, cleaner=cleaner)
+    server = WristScribeServer(("127.0.0.1", 0), TOKEN, service, max_body=1024 * 1024)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return Harness(server, output, transcriber)
+
+
 @pytest.fixture
 def harness():
-    output, transcriber = RecordingOutput(), FakeTranscriber()
-    service = DictationService(transcriber, output, append_space=True)
-    server = WristScribeServer(("127.0.0.1", 0), TOKEN, service, max_body=1024 * 1024)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    yield Harness(server, output, transcriber)
-    server.shutdown()
-    server.server_close()
+    h = _start()
+    yield h
+    h.server.shutdown()
+    h.server.server_close()
+
+
+@pytest.fixture
+def cleaning_harness():
+    h = _start(cleaner=FakeCleaner())
+    h.cleaner = h.server.service.cleaner
+    yield h
+    h.server.shutdown()
+    h.server.server_close()

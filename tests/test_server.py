@@ -50,7 +50,7 @@ def test_unknown_endpoint(harness):
 def test_text_json(harness):
     r = requests.post(f"{harness.base}/text", json={"text": "  Ciao, world  "}, headers=harness.auth)
     assert r.status_code == 200
-    assert r.json() == {"ok": True, "text": "Ciao, world"}
+    assert r.json() == {"ok": True, "text": "Ciao, world", "cleaned": False}
     assert harness.output.inserted == ["Ciao, world "]
 
 
@@ -182,3 +182,40 @@ def test_upload_too_large(harness):
     resp = conn.getresponse()
     assert resp.status == 413
     conn.close()
+
+
+# ---- AI cleanup ---------------------------------------------------------
+
+def test_text_is_cleaned_before_insert(cleaning_harness):
+    h = cleaning_harness
+    r = requests.post(f"{h.base}/text", json={"text": "um hello"}, headers=h.auth)
+    body = r.json()
+    assert body["text"] == "UM HELLO"
+    assert body["raw"] == "um hello"
+    assert body["cleaned"] is True
+    assert "cleanup_ms" in body
+    assert h.output.inserted == ["UM HELLO "]
+
+
+def test_audio_is_cleaned_before_insert(cleaning_harness):
+    h = cleaning_harness
+    r = requests.post(f"{h.base}/audio", data=FAKE_M4A, headers=h.auth)
+    assert r.json()["text"] == "HELLO FROM THE WATCH"
+    assert h.cleaner.calls == ["hello from the watch"]
+
+
+def test_cleanup_failure_falls_back_to_raw_text(cleaning_harness):
+    h = cleaning_harness
+    h.cleaner.error = "Cleanup API rate limit hit"
+    r = requests.post(f"{h.base}/text", json={"text": "keep me"}, headers=h.auth)
+    assert r.status_code == 200
+    assert r.json() == {"ok": True, "text": "keep me", "cleaned": False}
+    assert h.output.inserted == ["keep me "]
+
+
+def test_silence_skips_cleanup(cleaning_harness):
+    h = cleaning_harness
+    h.transcriber.reply = ""
+    requests.post(f"{h.base}/audio", data=FAKE_M4A, headers=h.auth)
+    assert h.cleaner.calls == []
+    assert h.output.inserted == []

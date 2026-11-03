@@ -18,12 +18,13 @@ There are two shortcuts. Build **A** first because it works on every watch, then
 
 ## 0. Before you start
 
-1. Start WristScribe on the laptop (`start-wristscribe.bat`). The console shows:
+1. Start WristScribe on the laptop (`start-wristscribe.bat`). The console shows the two
+   URLs you need, with your token already inside them:
    ```
-   Audio URL  : http://192.168.1.23:8765/audio
-   Text URL   : http://192.168.1.23:8765/text
-   Header     : Authorization: Bearer <your-token>
+   Shortcut A URL (Dictate to PC) : http://192.168.1.23:8765/text?token=Ab3...
+   Shortcut B URL (Record to PC)  : http://192.168.1.23:8765/audio?token=Ab3...
    ```
+   Tip: email or AirDrop the URL to your iPhone so you don't have to type it.
 2. Put the iPhone on the **same Wi-Fi** as the laptop.
 3. **Test the connection first.** In Safari on the iPhone, open the `Check from your
    iPhone's Safari` link from the console. You should see `{"ok": true, ...}`.
@@ -38,16 +39,25 @@ On the iPhone, open **Shortcuts** and tap **+**.
    - Language: **English**
    - Stop Listening: **After Pause** (or **On Tap** for long thoughts)
 3. Add the action **Get Contents of URL**:
-   - URL: your **Text URL**, e.g. `http://192.168.1.23:8765/text`
+   - URL: your full **Shortcut A URL**, including `?token=...`
    - Expand it with the arrow, then set **Method** to **POST**
-   - **Headers** → Add new header: Key `Authorization`, Value `Bearer <your-token>`
-     (with one space after `Bearer`)
    - **Request Body** → **JSON** → Add new field → **Text**: Key `text`, Value: pick the
      **Dictated Text** variable
 4. Open the shortcut's details (the **ⓘ** button, or tap the name → **Details**) and turn
    on **Show on Apple Watch**.
 5. Click into a text box on the laptop (Notepad works), then tap **▶** on the iPhone to test.
    When that works, run it from the watch.
+
+The whole shortcut is two actions:
+
+```
+Dictate Text            Language: English · Stop Listening: After Pause
+Get Contents of URL     http://192.168.1.23:8765/text?token=Ab3...
+                        Method: POST · Request Body: JSON · text = Dictated Text
+```
+
+With AI cleanup on (the default when an API key is set), what you say, e.g. *"um so
+let's meet at three, no, at four"*, is typed as *"Let's meet at four."*
 
 ## 2. Shortcut B: "Record to PC" (cloud Whisper)
 
@@ -60,8 +70,8 @@ Set an API key first (`api_key` in `config.toml`), then check it on the laptop:
    - Start Recording: **Immediately**
    - Finish Recording: **On Tap**
 3. Add **Get Contents of URL**:
-   - URL: your **Audio URL**, e.g. `http://192.168.1.23:8765/audio`
-   - Method **POST**, the same `Authorization` header as above
+   - URL: your full **Shortcut B URL**, including `?token=...`
+   - Method **POST**
    - **Request Body** → **File** → pick the **Recorded Audio** variable
 4. Turn on **Show on Apple Watch**, then test on the iPhone first and on the watch second.
 
@@ -88,8 +98,9 @@ for the iPhone.
 | Safari ping can't connect | Same Wi-Fi? In Windows go to **Settings → Network & internet → Wi-Fi → (your network) → Network profile type → Private**. Then allow Python through the firewall: **Windows Security → Firewall & network protection → Allow an app through firewall → python.exe → Private**. |
 | Works at home, not at university/café | Many campus networks (eduroam included) and public networks block device-to-device traffic. Turn on the iPhone's **Personal Hotspot**, connect the laptop to it, restart WristScribe and put the new IP (`172.20.10.x`) in the shortcut. |
 | Worked yesterday, not today | The laptop got a new IP. Reserve a fixed IP for it in your router's DHCP settings, or update the URL in the shortcut. |
-| `401 Missing or wrong token` | The header value must be exactly `Bearer ` + the token in `config.toml`. |
+| `401 Missing or wrong token` | The `?token=` in the shortcut URL must match `token` in `config.toml`. Copy the URL from the console again. |
 | `502 ... API key` | Add your key to `config.toml` or set `WRISTSCRIBE_API_KEY`, then restart. |
+| Text is typed, but not cleaned up | The console says why (e.g. `Cleanup skipped ...`). Check the key with `python -m wristscribe clean "um hello there"`. If the model was retired, set another one in `[cleanup] model`. |
 | Text lands in the wrong window | WristScribe types into whatever has keyboard focus. Click the target text box before you dictate. |
 | Clipboard content changed | `paste` mode restores **text** clipboards only. Use `mode = "type"` if you often copy images. |
 | An admin app (Task Manager etc.) gets no text | Windows blocks a normal app from typing into elevated apps. Run WristScribe as administrator only if you need this. |
@@ -98,4 +109,6 @@ for the iPhone.
 
 Traffic between the watch and the laptop is plain HTTP on your local network. The token
 stops strangers from typing on your laptop, but someone on the same Wi-Fi could read
-your dictations. Use it on home Wi-Fi or your own hotspot, not public Wi-Fi.
+your dictations (and the token in the URL). Use it on home Wi-Fi or your own hotspot,
+not public Wi-Fi. To change the token, edit `token` in `config.toml`, restart, and
+update the shortcut URL.

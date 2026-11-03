@@ -28,6 +28,19 @@ language = "en"
 vocabulary = ["MATLAB", "Simulink", "SolidWorks", "AutoCAD", "ANSYS", "KUKA", "ABB", "ROS"]
 timeout_seconds = 60
 
+[cleanup]
+# AI pass that removes "um", false starts and self-corrections, and fixes punctuation.
+# Uses the provider and API key from [transcription]. If it fails or no key is set,
+# the raw text is typed instead, so a dictation is never lost.
+enabled = true
+# Empty = provider default (groq: openai/gpt-oss-20b, openai: gpt-5-mini)
+model = ""
+# For reasoning models: "low" keeps it fast. Set to "" for models that don't support it.
+reasoning_effort = "low"
+# Delete this line if your model rejects a temperature setting.
+temperature = 0.0
+timeout_seconds = 10
+
 [output]
 # "paste" = clipboard + Ctrl+V. Fast, works almost everywhere, restores your clipboard.
 # "type"  = simulated key presses. Never touches the clipboard, slower for long text.

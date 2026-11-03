@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING
 
 import requests
 
+from .api import describe_error
+
 if TYPE_CHECKING:
     from .config import TranscriptionConfig
 
@@ -134,20 +136,8 @@ class CloudTranscriber:
             raise TranscriptionError(f"Could not reach the speech API: {exc}") from exc
 
         if resp.status_code != 200:
-            raise TranscriptionError(self._describe_error(resp))
+            raise TranscriptionError(describe_error(resp, "Speech API"))
         try:
             return str(resp.json().get("text", "")).strip()
         except ValueError as exc:
             raise TranscriptionError("Speech API returned a response that is not JSON") from exc
-
-    @staticmethod
-    def _describe_error(resp: requests.Response) -> str:
-        try:
-            detail = resp.json()["error"]["message"]
-        except (ValueError, KeyError, TypeError):
-            detail = resp.text[:200]
-        if resp.status_code == 401:
-            return f"Speech API rejected the API key: {detail}"
-        if resp.status_code == 429:
-            return f"Speech API rate limit hit, try again shortly: {detail}"
-        return f"Speech API error {resp.status_code}: {detail}"

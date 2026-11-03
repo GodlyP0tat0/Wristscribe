@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 from . import __version__
+from .cleanup import CleanupError, TextCleaner
 from .config import ConfigError, load_config, write_initial_config
 from .dictation import DictationService
 from .net import lan_ip
@@ -17,7 +18,7 @@ from .output import PrintOutput, make_output
 from .server import WristScribeServer
 from .transcriber import CloudTranscriber, TranscriptionError
 
-COMMANDS = ("init", "run", "send", "transcribe")
+COMMANDS = ("init", "run", "send", "transcribe", "clean")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -45,6 +46,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("transcribe", parents=[common], help="transcribe an audio file (checks your API key)")
     p.add_argument("file", type=Path)
+
+    p = sub.add_parser("clean", parents=[common], help="run the AI cleanup on some text (checks your API key)")
+    p.add_argument("text", nargs="+")
     return parser
 
 
@@ -68,7 +72,9 @@ def cmd_run(args: argparse.Namespace) -> int:
     cfg = load_config(args.config)
     output = PrintOutput() if args.dry_run else make_output(cfg.output.mode, cfg.output.restore_clipboard)
     transcriber = CloudTranscriber.from_config(cfg.transcription)
-    service = DictationService(transcriber, output, append_space=cfg.output.append_space)
+    has_key = bool(transcriber.api_key)
+    cleaner = TextCleaner.from_config(cfg.cleanup, cfg.transcription) if cfg.cleanup.enabled and has_key else None
+    service = DictationService(transcriber, output, append_space=cfg.output.append_space, cleaner=cleaner)
     try:
         server = WristScribeServer((cfg.server.host, cfg.server.port), cfg.server.token, service)
     except OSError as exc:
@@ -77,21 +83,25 @@ def cmd_run(args: argparse.Namespace) -> int:
         return 1
 
     base = f"http://{lan_ip()}:{cfg.server.port}"
+    token = cfg.server.token
     t = cfg.transcription
+    if cleaner:
+        cleanup = f"on ({t.provider} / {cleaner.model})"
+    else:
+        cleanup = "off" if not cfg.cleanup.enabled else "off (needs an API key)"
     print(f"""
 WristScribe {__version__} is listening.
 
-  Audio URL  : {base}/audio
-  Text URL   : {base}/text
-  Header     : Authorization: Bearer {cfg.server.token}
-  Speech API : {t.provider} / {t.model_name}
+  Shortcut A URL (Dictate to PC) : {base}/text?token={token}
+  Shortcut B URL (Record to PC)  : {base}/audio?token={token}
+
+  Speech API : {t.provider} / {t.model_name}{"" if has_key else "  (no API key: Shortcut B won't work)"}
+  AI cleanup : {cleanup}
   Output     : {output.name}
 
-  Check from your iPhone's Safari: {base}/ping?token={cfg.server.token}
+  Check from your iPhone's Safari: {base}/ping?token={token}
   Click into any text box, then run the shortcut on your watch. Ctrl+C stops.
 """)
-    if not transcriber.api_key:
-        print("  ! No API key set: /audio will fail until you add one. /text still works.\n")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -135,6 +145,19 @@ def cmd_transcribe(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_clean(args: argparse.Namespace) -> int:
+    cfg = load_config(args.config)
+    cleaner = TextCleaner.from_config(cfg.cleanup, cfg.transcription)
+    start = time.perf_counter()
+    try:
+        text = cleaner.clean(" ".join(args.text))
+    except CleanupError as exc:
+        print(f"Failed: {exc}")
+        return 1
+    print(f"{text}\n({(time.perf_counter() - start):.1f} s via {cfg.transcription.provider} / {cleaner.model})")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     # `python -m wristscribe` with no command (or only options) means `run`.
@@ -147,7 +170,13 @@ def main(argv: list[str] | None = None) -> int:
         format="%(asctime)s  %(message)s",
         datefmt="%H:%M:%S",
     )
-    handlers = {"init": cmd_init, "run": cmd_run, "send": cmd_send, "transcribe": cmd_transcribe}
+    handlers = {
+        "init": cmd_init,
+        "run": cmd_run,
+        "send": cmd_send,
+        "transcribe": cmd_transcribe,
+        "clean": cmd_clean,
+    }
     try:
         return handlers[args.command](args)
     except ConfigError as exc:

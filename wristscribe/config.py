@@ -19,12 +19,17 @@ MIN_TOKEN_LENGTH = 12
 class Provider:
     base_url: str
     default_model: str
+    default_cleanup_model: str
     key_env: str
 
 
 PROVIDERS: dict[str, Provider] = {
-    "groq": Provider("https://api.groq.com/openai/v1", "whisper-large-v3-turbo", "GROQ_API_KEY"),
-    "openai": Provider("https://api.openai.com/v1", "gpt-4o-mini-transcribe", "OPENAI_API_KEY"),
+    "groq": Provider(
+        "https://api.groq.com/openai/v1", "whisper-large-v3-turbo", "openai/gpt-oss-20b", "GROQ_API_KEY"
+    ),
+    "openai": Provider(
+        "https://api.openai.com/v1", "gpt-4o-mini-transcribe", "gpt-5-mini", "OPENAI_API_KEY"
+    ),
 }
 
 
@@ -69,6 +74,18 @@ class TranscriptionConfig:
 
 
 @dataclass
+class CleanupConfig:
+    enabled: bool = False
+    model: str = ""
+    reasoning_effort: str = ""
+    temperature: float | None = None
+    timeout_seconds: float = 10.0
+
+    def model_name(self, provider: str) -> str:
+        return self.model or PROVIDERS[provider].default_cleanup_model
+
+
+@dataclass
 class OutputConfig:
     mode: str = "paste"
     restore_clipboard: bool = True
@@ -79,6 +96,7 @@ class OutputConfig:
 class Config:
     server: ServerConfig = field(default_factory=ServerConfig)
     transcription: TranscriptionConfig = field(default_factory=TranscriptionConfig)
+    cleanup: CleanupConfig = field(default_factory=CleanupConfig)
     output: OutputConfig = field(default_factory=OutputConfig)
 
 
@@ -106,6 +124,11 @@ def validate(cfg: Config) -> None:
         raise ConfigError('[transcription] provider "custom" needs both base_url and model')
     if not isinstance(t.vocabulary, list) or not all(isinstance(w, str) for w in t.vocabulary):
         raise ConfigError("[transcription] vocabulary must be a list of strings")
+    c = cfg.cleanup
+    if c.enabled and t.provider == "custom" and not c.model:
+        raise ConfigError('[cleanup] needs a model when [transcription] provider is "custom"')
+    if c.temperature is not None and not isinstance(c.temperature, int | float):
+        raise ConfigError("[cleanup] temperature must be a number")
     if o.mode not in OUTPUT_MODES:
         raise ConfigError(f'[output] mode must be one of: {", ".join(OUTPUT_MODES)}')
 
@@ -122,6 +145,7 @@ def load_config(path: str | Path) -> Config:
         cfg = Config(
             server=_section(data, "server", ServerConfig),
             transcription=_section(data, "transcription", TranscriptionConfig),
+            cleanup=_section(data, "cleanup", CleanupConfig),
             output=_section(data, "output", OutputConfig),
         )
     except TypeError as exc:

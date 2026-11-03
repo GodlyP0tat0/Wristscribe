@@ -23,6 +23,10 @@ def test_init_writes_a_valid_config(tmp_path):
     assert cfg.transcription.model_name == "whisper-large-v3-turbo"
     assert "Simulink" in cfg.transcription.vocabulary
     assert cfg.output.mode == "paste"
+    assert cfg.cleanup.enabled is True
+    assert cfg.cleanup.model_name("groq") == "openai/gpt-oss-20b"
+    assert cfg.cleanup.reasoning_effort == "low"
+    assert cfg.cleanup.temperature == 0.0
 
 
 def test_each_init_gets_a_new_token(tmp_path):
@@ -51,6 +55,9 @@ def test_missing_file_points_to_init(tmp_path):
         ('[server]\ntoken = "long-enough-token"\n[transcription]\nprovider = "custom"', "base_url"),
         ('[server]\ntoken = "long-enough-token"\n[output]\nmode = "shout"', "mode"),
         ("[server\n", "not valid TOML"),
+        ('[server]\ntoken = "long-enough-token"\n[transcription]\nprovider = "custom"\nbase_url = "http://x/v1"\n'
+         'model = "w"\n[cleanup]\nenabled = true', "cleanup"),
+        ('[server]\ntoken = "long-enough-token"\n[cleanup]\ntemperature = "cold"', "temperature"),
     ],
 )
 def test_invalid_configs(tmp_path, toml, message):
