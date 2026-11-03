@@ -1,0 +1,10 @@
+# Secrets: holds your token and API key
+config.toml
+
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/

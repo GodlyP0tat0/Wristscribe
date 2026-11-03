@@ -1,0 +1,38 @@
+# WristScribe configuration
+# Created by `python -m wristscribe init`.
+# Keep this file private: it holds your token and (optionally) your API key.
+
+[server]
+# 0.0.0.0 = reachable from other devices on your Wi-Fi (your watch / iPhone).
+host = "0.0.0.0"
+port = 8765
+# Shared secret. The watch shortcut must send the header
+#   Authorization: Bearer <token>
+token = "CHANGE-ME"
+
+[transcription]
+# "groq"   = free tier, very fast (whisper-large-v3-turbo)
+# "openai" = gpt-4o-mini-transcribe
+# "custom" = any OpenAI-compatible /audio/transcriptions endpoint (set base_url + model)
+provider = "groq"
+# Leave empty to read the key from the WRISTSCRIBE_API_KEY environment variable
+# (or GROQ_API_KEY / OPENAI_API_KEY for the matching provider).
+api_key = ""
+# Empty = provider default.
+model = ""
+# Only for provider = "custom", e.g. "https://my-server.example/v1"
+base_url = ""
+# ISO-639-1 code: "en", "it", ... Empty = auto-detect (less reliable on short clips).
+language = "en"
+# Words the model tends to misspell. Sent as a spelling hint with every request.
+vocabulary = ["MATLAB", "Simulink", "SolidWorks", "AutoCAD", "ANSYS", "KUKA", "ABB", "ROS"]
+timeout_seconds = 60
+
+[output]
+# "paste" = clipboard + Ctrl+V. Fast, works almost everywhere, restores your clipboard.
+# "type"  = simulated key presses. Never touches the clipboard, slower for long text.
+# "print" = only print to this console (for testing).
+mode = "paste"
+restore_clipboard = true
+# Add a space after each dictation so consecutive ones don't run together.
+append_space = true
