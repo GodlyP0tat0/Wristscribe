@@ -1,2 +1,3 @@
 * text=auto
-*.bat text eol=crlf
+# Keep Windows line endings in the repo itself so "Download ZIP" gives a working .bat
+*.bat -text
